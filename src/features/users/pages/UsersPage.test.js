@@ -1,20 +1,18 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/svelte";
-vi.mock("../api/userApi.js", () => ({ getUsersApi: vi.fn() }));
-import { getUsersApi } from "../api/userApi.js";
+import { screen, waitFor } from "@testing-library/svelte";
 import UsersPage from "./UsersPage.svelte";
+import { renderWithProviders, mockApi, okResponse, sampleUser } from "../../../test-utils.js";
 
 describe("UsersPage", () => {
-  it("menampilkan daftar pengguna", async () => {
-    getUsersApi.mockResolvedValue({ ok: true, data: { users: [{ id: 1, name: "Ani", email: "ani@x.id" }] } });
-    render(UsersPage);
-    await waitFor(() => expect(screen.getByText("Ani")).toBeInTheDocument());
-    expect(screen.getByText("ani@x.id")).toBeInTheDocument();
+  it("menampilkan keadaan kosong", () => {
+    mockApi({ "GET /users": okResponse({ users: [] }) });
+    renderWithProviders(UsersPage);
+    expect(screen.getByTestId("users-empty")).toBeInTheDocument();
   });
-  it("gagal -> daftar kosong", async () => {
-    getUsersApi.mockResolvedValue({ ok: false });
-    render(UsersPage);
-    await waitFor(() => expect(getUsersApi).toHaveBeenCalled());
-    expect(screen.queryByRole("listitem")).toBeNull();
+
+  it("menampilkan daftar pengguna", async () => {
+    mockApi({ "GET /users": okResponse({ users: [sampleUser] }) });
+    renderWithProviders(UsersPage);
+    await waitFor(() => expect(screen.getByText("dian@example.com")).toBeInTheDocument());
+    expect(screen.getByText("D")).toBeInTheDocument();
   });
 });

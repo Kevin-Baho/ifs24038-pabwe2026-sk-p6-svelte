@@ -1,42 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import Swal from "sweetalert2";
 import { screen, fireEvent, waitFor } from "@testing-library/svelte";
-vi.mock("../states/linkTreesStore.js", async (orig) => ({ ...(await orig()), addLinkTree: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper.js", () => ({ showErrorDialog: vi.fn() }));
-import { addLinkTree } from "../states/linkTreesStore.js";
-import { showErrorDialog } from "../../../helpers/toolsHelper.js";
-import { renderWithProviders } from "../../../test-utils.js";
 import AddModal from "./AddModal.svelte";
+import { renderWithProviders, mockApi, okResponse, failResponse } from "../../../test-utils.js";
 
 async function submit() {
-  await fireEvent.input(screen.getByPlaceholderText("Judul"), { target: { value: "T" } });
-  await fireEvent.input(screen.getByPlaceholderText("Deskripsi"), { target: { value: "D" } });
-  await fireEvent.change(screen.getByRole("combobox"), { target: { value: "private" } });
-  await fireEvent.submit(screen.getByPlaceholderText("Judul").closest("form"));
+  await fireEvent.input(screen.getByLabelText("Judul"), { target: { value: "Baru" } });
+  await fireEvent.change(screen.getByLabelText("Tipe"), { target: { value: "private" } });
+  await fireEvent.input(screen.getByLabelText("Deskripsi"), { target: { value: "Isi" } });
+  await fireEvent.submit(screen.getByTestId("add-form"));
 }
 
 describe("AddModal", () => {
-  beforeEach(() => vi.clearAllMocks());
-  it("sukses menutup modal", async () => {
-    addLinkTree.mockResolvedValue({ ok: true });
-    const onclose = vi.fn();
-    renderWithProviders(AddModal, { props: { onclose } });
+  it("mengirim data dan menutup saat berhasil", async () => {
+    const onClose = vi.fn();
+    const fetchMock = mockApi({ "POST /link-trees": okResponse({}, "Dibuat"), "GET /link-trees": okResponse({ link_trees: [] }) });
+    renderWithProviders(AddModal, { onClose });
     await submit();
-    await waitFor(() => expect(onclose).toHaveBeenCalled());
-    expect(addLinkTree).toHaveBeenCalledWith({ title: "T", description: "D", type: "private" });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ title: "Baru", type: "private", description: "Isi" });
   });
-  it("gagal menampilkan error", async () => {
-    addLinkTree.mockResolvedValue({ ok: false, message: "x" });
-    const onclose = vi.fn();
-    renderWithProviders(AddModal, { props: { onclose } });
+
+  it("menampilkan galat dan tetap terbuka saat gagal", async () => {
+    const onClose = vi.fn();
+    mockApi({ "POST /link-trees": failResponse("Gagal simpan") });
+    renderWithProviders(AddModal, { onClose });
     await submit();
-    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith("x"));
-    expect(onclose).not.toHaveBeenCalled();
-  });
-  it("tombol Batal & status menyimpan", async () => {
-    const onclose = vi.fn();
-    renderWithProviders(AddModal, { props: { onclose }, stores: { flags: { add: true } } });
-    expect(screen.getByText("Menyimpan...")).toBeDisabled();
-    await fireEvent.click(screen.getByText("Batal"));
-    expect(onclose).toHaveBeenCalled();
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error" })));
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

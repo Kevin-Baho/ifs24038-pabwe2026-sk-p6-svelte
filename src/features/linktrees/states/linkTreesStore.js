@@ -1,45 +1,60 @@
 import { writable } from "svelte/store";
 import * as api from "../api/linkTreeApi.js";
+import { isSuccess } from "../../../helpers/apiHelper.js";
 
 export const linkTrees = writable([]);
 export const linkTree = writable(null);
-export const loading = writable(false);
-// bendera mutasi
-export const flags = writable({
-  add: false, change: false, cover: false, remove: false, removeAll: false, item: false,
-});
+export const isAdded = writable(false);
+export const isChanged = writable(false);
+export const isCoverChanged = writable(false);
+export const isDeleted = writable(false);
+export const isAllDeleted = writable(false);
+export const isItemChanged = writable(false);
 
-const setFlag = (key, v) => flags.update((f) => ({ ...f, [key]: v }));
-
-export async function fetchLinkTrees() {
-  loading.set(true);
-  const r = await api.getLinkTreesApi();
-  if (r.ok) linkTrees.set(r.data.link_trees);
-  loading.set(false);
-  return r;
+export async function loadLinkTrees() {
+  const res = await api.getLinkTrees();
+  linkTrees.set(isSuccess(res) ? res.data.link_trees : []);
+  return res;
 }
 
-export async function fetchLinkTree(id) {
-  loading.set(true);
-  const r = await api.getLinkTreeApi(id);
-  linkTree.set(r.ok ? r.data.link_tree : null);
-  loading.set(false);
-  return r;
+export async function loadLinkTree(id) {
+  const res = await api.getLinkTree(id);
+  linkTree.set(
+    isSuccess(res) ? { ...res.data.link_tree, items: res.data.link_tree.items || [] } : null
+  );
+  return res;
 }
 
-async function mutate(key, call, after) {
-  setFlag(key, true);
-  const r = await call();
-  setFlag(key, false);
-  if (r.ok) await after();
-  return r;
+async function mutate(call, flag, reload) {
+  const res = await call();
+  if (isSuccess(res)) {
+    flag.set(true);
+    await reload();
+  }
+  return res;
 }
 
-export const addLinkTree = (body) => mutate("add", () => api.addLinkTreeApi(body), fetchLinkTrees);
-export const changeLinkTree = (id, body) => mutate("change", () => api.updateLinkTreeApi(id, body), () => fetchLinkTree(id));
-export const changeCover = (id, file) => mutate("cover", () => api.updateCoverApi(id, file), () => fetchLinkTree(id));
-export const removeLinkTree = (id) => mutate("remove", () => api.deleteLinkTreeApi(id), fetchLinkTrees);
-export const removeAllLinkTrees = () => mutate("removeAll", api.deleteAllLinkTreesApi, fetchLinkTrees);
-export const addItem = (id, body) => mutate("item", () => api.addItemApi(id, body), () => fetchLinkTree(id));
-export const changeItem = (id, itemId, body) => mutate("item", () => api.updateItemApi(id, itemId, body), () => fetchLinkTree(id));
-export const removeItem = (id, itemId) => mutate("item", () => api.deleteItemApi(id, itemId), () => fetchLinkTree(id));
+export const addLinkTree = (data) => mutate(() => api.postLinkTree(data), isAdded, loadLinkTrees);
+export const changeLinkTree = (id, data) =>
+  mutate(() => api.putLinkTree(id, data), isChanged, () => loadLinkTree(id));
+export const changeCover = (id, file) =>
+  mutate(() => api.postCover(id, file), isCoverChanged, () => loadLinkTree(id));
+export const removeLinkTree = (id) =>
+  mutate(() => api.deleteLinkTree(id), isDeleted, loadLinkTrees);
+export const removeAllLinkTrees = () =>
+  mutate(() => api.deleteAllLinkTrees(), isAllDeleted, loadLinkTrees);
+
+export const addItem = (id, data) =>
+  mutate(() => api.postItem(id, data), isItemChanged, () => loadLinkTree(id));
+export const changeItem = (id, itemId, data) =>
+  mutate(() => api.putItem(id, itemId, data), isItemChanged, () => loadLinkTree(id));
+export const removeItem = (id, itemId) =>
+  mutate(() => api.deleteItem(id, itemId), isItemChanged, () => loadLinkTree(id));
+
+export function resetLinkTrees() {
+  linkTrees.set([]);
+  linkTree.set(null);
+  [isAdded, isChanged, isCoverChanged, isDeleted, isAllDeleted, isItemChanged].forEach((flag) =>
+    flag.set(false)
+  );
+}

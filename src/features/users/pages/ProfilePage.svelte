@@ -1,53 +1,108 @@
 <script>
-  import { profile, loadProfile } from "../../auth/states/authStore.js";
-  import { updateMeApi, updatePhotoApi, updatePasswordApi } from "../api/userApi.js";
+  import { onMount } from "svelte";
   import { useInput } from "../../../hooks/useInput.js";
-  import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper.js";
+  import {
+    profile,
+    loadProfile,
+    updateProfile,
+    updatePhoto,
+    changePassword,
+  } from "../states/usersStore.js";
+  import { handleResult, showWarningDialog } from "../../../helpers/toolsHelper.js";
 
-  const { value: name } = useInput($profile?.name ?? "");
-  const { value: email } = useInput($profile?.email ?? "");
-  const { value: oldPass, reset: resetOld } = useInput();
-  const { value: newPass, reset: resetNew } = useInput();
+  const name = useInput();
+  const email = useInput();
+  const oldPassword = useInput();
+  const newPassword = useInput();
+  const nameValue = name.value;
+  const emailValue = email.value;
+  const oldValue = oldPassword.value;
+  const newValue = newPassword.value;
+  let photo = $state(null);
 
-  async function handle(promise, okText) {
-    const r = await promise;
-    if (r.ok) {
-      await loadProfile();
-      showSuccessDialog(okText);
-    } else showErrorDialog(r.message);
-    return r;
-  }
-  function saveData(e) {
-    e.preventDefault();
-    return handle(updateMeApi($name, $email), "Profil diperbarui");
-  }
-  function savePhoto(e) {
-    const f = e.target.files[0];
-    if (f) return handle(updatePhotoApi(f), "Foto diperbarui");
-  }
-  async function savePassword(e) {
-    e.preventDefault();
-    const r = await handle(updatePasswordApi($oldPass, $newPass), "Kata sandi diperbarui");
-    if (r.ok) {
-      resetOld();
-      resetNew();
+  // Isi formulir setiap kali profil tersedia / berubah.
+  $effect(() => {
+    if ($profile) {
+      nameValue.set($profile.name);
+      emailValue.set($profile.email);
     }
+  });
+
+  onMount(() => {
+    loadProfile();
+  });
+
+  const onPhoto = (event) => {
+    photo = event.target.files[0];
+  };
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    const res = await updateProfile({ name: $nameValue, email: $emailValue });
+    await handleResult(res, () => {});
+  }
+
+  async function savePhoto(event) {
+    event.preventDefault();
+    if (!photo) {
+      await showWarningDialog("Pilih foto terlebih dahulu");
+      return;
+    }
+    const res = await updatePhoto(photo);
+    await handleResult(res, () => {
+      photo = null;
+    });
+  }
+
+  async function savePassword(event) {
+    event.preventDefault();
+    const res = await changePassword({ password: $oldValue, new_password: $newValue });
+    await handleResult(res, () => {
+      oldPassword.reset();
+      newPassword.reset();
+    });
   }
 </script>
 
-<h1 class="text-2xl font-bold mb-4">Profil</h1>
-<div class="grid gap-6 md:grid-cols-2">
-  <form onsubmit={saveData} class="bg-white rounded-xl p-5 shadow-sm space-y-3">
-    {#if $profile?.photo}<img src={$profile.photo} alt="Foto profil" class="w-20 h-20 rounded-full object-cover" />{/if}
-    <input type="file" accept="image/*" aria-label="Unggah foto profil" onchange={savePhoto} class="text-sm" />
-    <input bind:value={$name} placeholder="Nama" required class="w-full border rounded-lg px-3 py-2" />
-    <input type="email" bind:value={$email} placeholder="Email" required class="w-full border rounded-lg px-3 py-2" />
-    <button class="bg-indigo-600 text-white rounded-lg px-4 py-2 font-semibold">Simpan</button>
+<section class="max-w-2xl space-y-6">
+  <h1 class="text-xl font-bold">Profil</h1>
+
+  <form onsubmit={saveProfile} class="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="profile-form">
+    <h2 class="font-semibold">Data diri</h2>
+    {#if $profile && $profile.photo}
+      <img src={$profile.photo} alt="Foto profil" class="w-16 h-16 rounded-full object-cover" />
+    {/if}
+    <div>
+      <label for="profile-name" class="block text-sm font-medium mb-1">Nama</label>
+      <input id="profile-name" required value={$nameValue} oninput={name.onChange}
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label for="profile-email" class="block text-sm font-medium mb-1">Email</label>
+      <input id="profile-email" type="email" required value={$emailValue} oninput={email.onChange}
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    </div>
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Simpan</button>
   </form>
-  <form onsubmit={savePassword} class="bg-white rounded-xl p-5 shadow-sm space-y-3">
+
+  <form onsubmit={savePhoto} class="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="photo-form">
+    <h2 class="font-semibold">Foto profil</h2>
+    <input type="file" accept="image/*" aria-label="Pilih foto profil" onchange={onPhoto} data-testid="photo-input" class="text-sm" />
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Unggah foto</button>
+  </form>
+
+  <form onsubmit={savePassword} class="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="password-form">
     <h2 class="font-semibold">Ubah kata sandi</h2>
-    <input type="password" bind:value={$oldPass} placeholder="Kata sandi lama" required class="w-full border rounded-lg px-3 py-2" />
-    <input type="password" bind:value={$newPass} placeholder="Kata sandi baru" required class="w-full border rounded-lg px-3 py-2" />
-    <button class="bg-indigo-600 text-white rounded-lg px-4 py-2 font-semibold">Ubah</button>
+    <div>
+      <label for="old-password" class="block text-sm font-medium mb-1">Kata sandi lama</label>
+      <input id="old-password" type="password" required value={$oldValue} oninput={oldPassword.onChange}
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label for="new-password" class="block text-sm font-medium mb-1">Kata sandi baru</label>
+      <input id="new-password" type="password" required value={$newValue} oninput={newPassword.onChange}
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    </div>
+    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Ubah kata sandi</button>
   </form>
-</div>
+</section>

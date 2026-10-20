@@ -1,43 +1,48 @@
 <script>
   import { useInput } from "../../../hooks/useInput.js";
   import { register } from "../states/authStore.js";
-  import { navigate } from "../../../router.js";
-  import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper.js";
-  import Link from "../../common/components/Link.svelte";
+  import { navigate, link } from "../../../router.js";
+  import { handleResult } from "../../../helpers/toolsHelper.js";
 
-  const { value: name } = useInput();
-  const { value: email } = useInput();
-  const { value: password } = useInput();
-  let busy = $state(false);
+  const name = useInput();
+  const email = useInput();
+  const password = useInput();
+  const nameValue = name.value;
+  const emailValue = email.value;
+  const passwordValue = password.value;
+  let loading = $state(false);
 
-  async function submit(e) {
-    e.preventDefault();
-    busy = true;
-    const r = await register($name, $email, $password);
-    busy = false;
-    if (r.ok) {
-      await showSuccessDialog("Akun dibuat, silakan masuk.");
-      navigate("/auth/login");
-    } else showErrorDialog(r.message);
+  async function submit(event) {
+    event.preventDefault();
+    loading = true;
+    const res = await register($nameValue, $emailValue, $passwordValue);
+    loading = false;
+    await handleResult(res, () => navigate("/auth/login"));
   }
 </script>
 
-<form onsubmit={submit} class="space-y-4">
-  <h2 class="text-xl font-bold text-center">Daftar</h2>
+<form onsubmit={submit} class="space-y-4" data-testid="register-form">
+  <h2 class="text-lg font-bold">Daftar</h2>
   <div>
-    <label for="register-name-input" class="block text-sm font-medium text-slate-700 mb-1">Nama</label>
-    <input id="register-name-input" name="name" autocomplete="name" placeholder="Nama" required bind:value={$name} class="w-full border rounded-lg px-3 py-2" />
+    <label for="register-name-input" class="block text-sm font-medium mb-1">Nama</label>
+    <input id="register-name-input" type="text" required value={$nameValue} oninput={name.onChange}
+      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
   </div>
   <div>
-    <label for="register-email-input" class="block text-sm font-medium text-slate-700 mb-1">Email</label>
-    <input id="register-email-input" name="email" type="email" autocomplete="email" placeholder="Email" required bind:value={$email} class="w-full border rounded-lg px-3 py-2" />
+    <label for="register-email-input" class="block text-sm font-medium mb-1">Email</label>
+    <input id="register-email-input" type="email" required value={$emailValue} oninput={email.onChange}
+      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
   </div>
   <div>
-    <label for="register-password-input" class="block text-sm font-medium text-slate-700 mb-1">Kata sandi</label>
-    <input id="register-password-input" name="password" type="password" autocomplete="new-password" placeholder="Kata sandi" required bind:value={$password} class="w-full border rounded-lg px-3 py-2" />
+    <label for="register-password-input" class="block text-sm font-medium mb-1">Kata sandi</label>
+    <input id="register-password-input" type="password" required value={$passwordValue} oninput={password.onChange}
+      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
   </div>
-  <button id="register-submit-button" type="submit" disabled={busy} class="w-full bg-indigo-600 text-white rounded-lg py-2 font-semibold">
-    {busy ? "Memproses..." : "Daftar"}
+  <button id="register-submit-button" type="submit" disabled={loading}
+    class="w-full rounded-lg bg-indigo-600 text-white py-2 text-sm font-semibold disabled:opacity-60">
+    {loading ? "Memproses..." : "Daftar"}
   </button>
-  <p class="text-sm text-center">Sudah punya akun? <Link href="/auth/login" class="text-indigo-600 font-semibold">Masuk</Link></p>
+  <p class="text-sm text-center text-slate-600">
+    Sudah punya akun? <a href="/auth/login" onclick={link} class="text-indigo-700 font-semibold underline">Masuk</a>
+  </p>
 </form>

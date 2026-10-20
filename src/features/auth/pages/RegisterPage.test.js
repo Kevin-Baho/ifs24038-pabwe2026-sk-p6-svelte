@@ -1,36 +1,38 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
-vi.mock("../states/authStore.js", () => ({ register: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper.js", () => ({ showErrorDialog: vi.fn(), showSuccessDialog: vi.fn().mockResolvedValue() }));
-import { register } from "../states/authStore.js";
-import { showErrorDialog, showSuccessDialog } from "../../../helpers/toolsHelper.js";
+import Swal from "sweetalert2";
+import { get } from "svelte/store";
+import { screen, fireEvent, waitFor } from "@testing-library/svelte";
 import RegisterPage from "./RegisterPage.svelte";
+import { currentPath } from "../../../router.js";
+import { renderWithProviders, mockApi, okResponse, failResponse } from "../../../test-utils.js";
 
-async function fill() {
-  await fireEvent.input(screen.getByPlaceholderText("Nama"), { target: { value: "N" } });
-  await fireEvent.input(screen.getByPlaceholderText("Email"), { target: { value: "a@b.c" } });
-  await fireEvent.input(screen.getByPlaceholderText("Kata sandi"), { target: { value: "pw" } });
-  await fireEvent.submit(screen.getByRole("button", { name: /Daftar|Memproses/ }).closest("form"));
+async function fillAndSubmit() {
+  await fireEvent.input(screen.getByLabelText("Nama"), { target: { value: "Dian" } });
+  await fireEvent.input(screen.getByLabelText("Email"), { target: { value: "a@a.com" } });
+  await fireEvent.input(screen.getByLabelText("Kata sandi"), { target: { value: "rahasia" } });
+  await fireEvent.submit(screen.getByTestId("register-form"));
 }
 
 describe("RegisterPage", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("register sukses -> dialog & ke login", async () => {
-    let done;
-    register.mockReturnValue(new Promise((r) => (done = r)));
-    render(RegisterPage);
-    await fill();
-    expect(screen.getByText("Memproses...")).toBeInTheDocument();
-    done({ ok: true });
-    await waitFor(() => expect(window.location.pathname).toBe("/auth/login"));
-    expect(register).toHaveBeenCalledWith("N", "a@b.c", "pw");
-    expect(showSuccessDialog).toHaveBeenCalled();
+  it("register berhasil lalu menuju login", async () => {
+    mockApi({ "POST /auth/register": okResponse({}, "Akun dibuat") });
+    renderWithProviders(RegisterPage);
+    await fillAndSubmit();
+    await waitFor(() => expect(get(currentPath)).toBe("/auth/login"));
   });
-  it("register gagal", async () => {
-    register.mockResolvedValue({ ok: false, message: "dipakai" });
-    render(RegisterPage);
-    await fill();
-    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith("dipakai"));
+
+  it("menampilkan galat bila register gagal", async () => {
+    mockApi({ "POST /auth/register": failResponse("Email terpakai") });
+    renderWithProviders(RegisterPage);
+    await fillAndSubmit();
+    await waitFor(() =>
+      expect(Swal.fire).toHaveBeenCalledWith(expect.objectContaining({ icon: "error" }))
+    );
+    expect(screen.getByRole("button", { name: "Daftar" })).toBeEnabled();
+  });
+
+  it("tautan masuk berpindah ke login", async () => {
+    renderWithProviders(RegisterPage);
+    await fireEvent.click(screen.getByText("Masuk", { selector: "a" }));
+    expect(get(currentPath)).toBe("/auth/login");
   });
 });

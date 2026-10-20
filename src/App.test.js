@@ -1,49 +1,60 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { get } from "svelte/store";
 import { render, screen, waitFor } from "@testing-library/svelte";
-vi.mock("./features/auth/states/authStore.js", async (orig) => ({ ...(await orig()), loadProfile: vi.fn() }));
-import { profile, loadProfile } from "./features/auth/states/authStore.js";
-import { navigate } from "./router.js";
 import App from "./App.svelte";
+import { currentPath, navigate } from "./router.js";
+import { authToken } from "./features/auth/states/authStore.js";
+import { resetAllStores, mockApi, okResponse, sampleTree, sampleUser } from "./test-utils.js";
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  profile.set(null);
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-    json: async () => ({ status: "success", data: { link_trees: [], users: [], link_tree: null } }),
-  }));
+const routes = () => ({
+  "GET /users/me": okResponse({ user: sampleUser }),
+  "GET /users": okResponse({ users: [sampleUser] }),
+  "GET /link-trees": okResponse({ link_trees: [sampleTree] }),
+  "GET /link-trees/t1": okResponse({ link_tree: sampleTree }),
 });
 
+function open(path, token = "tok") {
+  resetAllStores();
+  mockApi(routes());
+  if (token) authToken.set(token);
+  navigate(path);
+  return render(App);
+}
+
 describe("App", () => {
-  it("menampilkan 'Memuat...' sebelum sesi siap", () => {
-    loadProfile.mockReturnValue(new Promise(() => {}));
-    navigate("/");
-    render(App);
-    expect(screen.getByText("Memuat...")).toBeInTheDocument();
+  it("tanpa token, halaman aplikasi dialihkan ke login", async () => {
+    open("/", null);
+    await waitFor(() => expect(get(currentPath)).toBe("/auth/login"));
+    expect(screen.getByTestId("login-form")).toBeInTheDocument();
   });
-  it("belum login di rute aplikasi -> diarahkan ke login", async () => {
-    loadProfile.mockResolvedValue(null);
-    navigate("/users");
-    render(App);
-    await waitFor(() => expect(window.location.pathname).toBe("/auth/login"));
-    expect(await screen.findByPlaceholderText("Email")).toBeInTheDocument();
+
+  it("dengan token, halaman auth dialihkan ke beranda", async () => {
+    open("/auth/login");
+    await waitFor(() => expect(get(currentPath)).toBe("/"));
+    expect(screen.getByText("Semua Link Tree", { selector: "h1" })).toBeInTheDocument();
   });
-  it("sudah login di rute auth -> diarahkan ke beranda", async () => {
-    loadProfile.mockImplementation(async () => profile.set({ id: 1, name: "Ani" }));
-    navigate("/auth/login");
-    render(App);
-    await waitFor(() => expect(window.location.pathname).toBe("/"));
-    expect(await screen.findByRole("heading", { name: "Semua Link Tree" })).toBeInTheDocument();
+
+  it("menampilkan halaman register", () => {
+    open("/auth/register", null);
+    expect(screen.getByTestId("register-form")).toBeInTheDocument();
   });
-  it("sudah login: halaman 404 untuk rute tak dikenal", async () => {
-    loadProfile.mockImplementation(async () => profile.set({ id: 1, name: "Ani" }));
-    navigate("/tidak-ada");
-    render(App);
-    expect(await screen.findByText("404")).toBeInTheDocument();
+
+  it("menampilkan detail link tree", async () => {
+    open("/link-trees/t1");
+    await waitFor(() => expect(screen.getByTestId("detail-title")).toBeInTheDocument());
   });
-  it("sudah login: halaman register diarahkan, detail tampil", async () => {
-    loadProfile.mockImplementation(async () => profile.set({ id: 1, name: "Ani" }));
-    navigate("/link-trees/1");
-    render(App);
-    expect(await screen.findByText(/tidak ditemukan/)).toBeInTheDocument();
+
+  it("menampilkan halaman pengguna", async () => {
+    open("/users");
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Pengguna" })).toBeInTheDocument());
+  });
+
+  it("menampilkan halaman profil", async () => {
+    open("/profile");
+    await waitFor(() => expect(screen.getByTestId("profile-form")).toBeInTheDocument());
+  });
+
+  it("path tak dikenal menampilkan 404", () => {
+    open("/tidak-ada");
+    expect(screen.getByText("Halaman tidak ditemukan")).toBeInTheDocument();
   });
 });

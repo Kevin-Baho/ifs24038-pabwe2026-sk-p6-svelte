@@ -1,118 +1,110 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import Swal from "sweetalert2";
+import { get } from "svelte/store";
+import { currentPath } from "../../../router.js";
 import { screen, fireEvent, waitFor } from "@testing-library/svelte";
-vi.mock("../states/linkTreesStore.js", async (orig) => ({ ...(await orig()), fetchLinkTree: vi.fn(), removeItem: vi.fn(), changeCover: vi.fn(), addItem: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper.js", async (orig) => ({
-  ...(await orig()), showConfirmDialog: vi.fn(), showErrorDialog: vi.fn(),
-}));
-import { fetchLinkTree, removeItem, changeCover, addItem } from "../states/linkTreesStore.js";
-import { showConfirmDialog, showErrorDialog } from "../../../helpers/toolsHelper.js";
-import { linkTree } from "../states/linkTreesStore.js";
-import { tick } from "svelte";
-import { renderWithProviders } from "../../../test-utils.js";
 import DetailPage from "./DetailPage.svelte";
+import { renderWithProviders, mockApi, okResponse, sampleTree } from "../../../test-utils.js";
 
-const tree = {
-  id: 7, user_id: 1, title: "Tree", description: "Deskripsi", type: "public", cover: "http://x/c.png",
-  items: [{ id: 11, title: "GitHub", url: "https://github.com" }],
-};
-const render = (stores = {}) =>
-  renderWithProviders(DetailPage, { props: { params: { linkTreeId: "7" } }, stores: { profile: { id: 1 }, linkTree: tree, ...stores } });
+const withCover = { ...sampleTree, cover: "http://x/c.png" };
+const empty = { ...sampleTree, items: [] };
+const routes = (tree = sampleTree) => ({
+  "GET /link-trees/t1": okResponse({ link_tree: tree }),
+  "DELETE /link-trees/t1/items/i1": okResponse({}, "Tautan dihapus"),
+  "POST /link-trees/t1/cover": okResponse({}, "Sampul diubah"),
+  "POST /link-trees/t1/items": okResponse({}, "Tautan ditambah"),
+});
 
 describe("DetailPage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("pemilik: detail, item, dan tombol aksi", () => {
-    render();
-    expect(fetchLinkTree).toHaveBeenCalledWith("7");
-    expect(screen.getByText("Tree")).toBeInTheDocument();
-    expect(screen.getByAltText("Tree")).toBeInTheDocument();
-    expect(screen.getByText("GitHub").closest("a")).toHaveAttribute("href", "https://github.com");
-    expect(screen.getByText("Sampul")).toBeInTheDocument();
+  it("menampilkan status memuat lalu detail dengan placeholder sampul", async () => {
+    mockApi(routes());
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    expect(screen.getByTestId("loading")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("detail-title")).toHaveTextContent("Portofolio"));
+    expect(screen.getAllByTestId("item")).toHaveLength(1);
+    expect(screen.getByText("&larr; Semua Link Tree".replace("&larr;", "←"))).toBeInTheDocument();
   });
-  it("bukan pemilik: tanpa tombol aksi, tanpa cover, tanpa items", () => {
-    render({ profile: { id: 99 }, linkTree: { ...tree, cover: null, items: undefined } });
-    expect(screen.queryByText("Sampul")).toBeNull();
-    expect(screen.queryByAltText("Tree")).toBeNull();
-    expect(screen.getByText("Belum ada tautan.")).toBeInTheDocument();
+
+  it("tautan kembali menuju beranda", async () => {
+    mockApi(routes());
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    currentPath.set("/link-trees/t1");
+    await fireEvent.click(screen.getByText(/Semua Link Tree/));
+    expect(get(currentPath)).toBe("/");
   });
-  it("memuat & tidak ditemukan", () => {
-    const a = render({ loading: true });
-    expect(screen.getByText("Memuat...")).toBeInTheDocument();
-    a.unmount();
-    render({ linkTree: null });
-    expect(screen.getByText(/tidak ditemukan/)).toBeInTheDocument();
+
+  it("menampilkan sampul dan keadaan tanpa tautan", async () => {
+    mockApi(routes({ ...withCover, items: [] }));
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    await waitFor(() => expect(screen.getByAltText("Portofolio")).toBeInTheDocument());
+    expect(screen.getByTestId("no-items")).toBeInTheDocument();
   });
-  it("membuka & menutup modal ubah, sampul, dan item", async () => {
-    render();
-    await fireEvent.click(screen.getByText("Ubah"));
-    expect(screen.getByText("Ubah Link Tree")).toBeInTheDocument();
-    await fireEvent.click(screen.getByText("Batal"));
-    await fireEvent.click(screen.getByText("Sampul"));
-    expect(screen.getByText("Ubah Sampul")).toBeInTheDocument();
-    await fireEvent.click(screen.getByText("Batal"));
-    await fireEvent.click(screen.getByText("Tambah"));
-    expect(screen.getByText("Tambah Tautan", { selector: "h2" })).toBeInTheDocument();
-    await fireEvent.click(screen.getByText("Batal"));
+
+  it("membuka modal ubah data, ubah sampul, dan tambah tautan", async () => {
+    mockApi(routes(empty));
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    await waitFor(() => expect(screen.getByTestId("detail-title")).toBeInTheDocument());
+
+    // 1. Ubah Data (Gunakan findByRole agar menunggu modal muncul)
+    await fireEvent.click(screen.getByText("Ubah data"));
+    expect(await screen.findByRole("dialog", { name: "Ubah Link Tree" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByLabelText("Tutup"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // 2. Ubah Sampul
+    await fireEvent.click(screen.getByText("Ubah sampul"));
+    expect(await screen.findByRole("dialog", { name: "Ubah Sampul" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByLabelText("Tutup"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // 3. Tambah Tautan
+    await fireEvent.click(screen.getByText("Tambah tautan"));
+    expect(await screen.findByRole("dialog", { name: "Tambah Tautan" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByLabelText("Tutup"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("mengunggah sampul dan menambah tautan sampai modal tertutup", async () => {
+    mockApi(routes(empty));
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    await waitFor(() => expect(screen.getByTestId("detail-title")).toBeInTheDocument());
+
+    await fireEvent.click(screen.getByText("Ubah sampul"));
+    // Gunakan findByTestId untuk menunggu input dari modal yang di-lazy load
+    const input = await screen.findByTestId("cover-input");
+    const file = new File(["x"], "c.png", { type: "image/png" });
+    await fireEvent.change(input, { target: { files: [file] } });
+    await fireEvent.submit(screen.getByTestId("cover-form"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await fireEvent.click(screen.getByText("Tambah tautan"));
+    // Tunggu modal form tautan muncul sebelum mengisi input
+    await screen.findByRole("dialog", { name: "Tambah Tautan" });
+    await fireEvent.input(screen.getByLabelText("Judul tautan"), { target: { value: "Blog" } });
+    await fireEvent.input(screen.getByLabelText("URL"), { target: { value: "https://blog.dev" } });
+    await fireEvent.submit(screen.getByTestId("item-form"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("mengubah tautan lewat modal", async () => {
+    mockApi(routes());
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    await waitFor(() => expect(screen.getAllByTestId("item")).toHaveLength(1));
     await fireEvent.click(screen.getByLabelText("Ubah GitHub"));
-    expect(screen.getByDisplayValue("GitHub")).toBeInTheDocument();
-    await fireEvent.click(screen.getByText("Batal"));
-    expect(screen.queryByDisplayValue("GitHub")).toBeNull();
+    // Gunakan findByRole
+    expect(await screen.findByRole("dialog", { name: "Ubah Tautan" })).toBeInTheDocument();
   });
-  it("hapus item: batal, sukses, gagal", async () => {
-    render();
-    showConfirmDialog.mockResolvedValueOnce(false);
-    await fireEvent.click(screen.getByLabelText("Hapus GitHub"));
-    await waitFor(() => expect(showConfirmDialog).toHaveBeenCalled());
-    expect(removeItem).not.toHaveBeenCalled();
 
-    showConfirmDialog.mockResolvedValueOnce(true);
-    removeItem.mockResolvedValueOnce({ ok: true });
+  it("hapus tautan (dibatalkan lalu dikonfirmasi)", async () => {
+    const fetchMock = mockApi(routes());
+    renderWithProviders(DetailPage, { linkTreeId: "t1" });
+    await waitFor(() => expect(screen.getAllByTestId("item")).toHaveLength(1));
+    Swal.fire.mockResolvedValueOnce({ isConfirmed: false });
     await fireEvent.click(screen.getByLabelText("Hapus GitHub"));
-    await waitFor(() => expect(removeItem).toHaveBeenCalledWith(7, 11));
-    expect(showErrorDialog).not.toHaveBeenCalled();
-
-    showConfirmDialog.mockResolvedValueOnce(true);
-    removeItem.mockResolvedValueOnce({ ok: false, message: "err" });
+    await waitFor(() => expect(Swal.fire).toHaveBeenCalled());
+    expect(fetchMock.mock.calls.some(([, o]) => o.method === "DELETE")).toBe(false);
     await fireEvent.click(screen.getByLabelText("Hapus GitHub"));
-    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith("err"));
-  });
-  it("bukan pemilik: item tampil tanpa tombol ubah/hapus", () => {
-    render({ profile: { id: 99 } });
-    expect(screen.getByText("GitHub")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Ubah GitHub")).toBeNull();
-    expect(screen.queryByLabelText("Hapus GitHub")).toBeNull();
-  });
-  it("tanpa profil dianggap bukan pemilik", () => {
-    render({ profile: null });
-    expect(screen.queryByText("Sampul")).toBeNull();
-  });
-  it("memperbarui item saat store berubah", async () => {
-    render();
-    const item = tree.items[0];
-    linkTree.set({ ...tree, items: [{ ...item, url: "https://baru.com" }] });
-    await tick();
-    expect(screen.getByText("GitHub").closest("a")).toHaveAttribute("href", "https://baru.com");
-    linkTree.set({ ...tree, items: [{ ...item, url: "https://baru.com", title: "GL" }] });
-    await tick();
-    expect(screen.getByLabelText("Ubah GL")).toBeInTheDocument();
-  });
-  it("submit dari modal sampul dan item membaca data link tree", async () => {
-    changeCover.mockResolvedValue({ ok: true });
-    addItem.mockResolvedValue({ ok: true });
-    const { container } = render();
-    await fireEvent.click(screen.getByText("Sampul"));
-    const file = new File(["x"], "c.png");
-    await fireEvent.change(container.querySelector("input[type=file]"), { target: { files: [file] } });
-    await fireEvent.submit(container.querySelector("form"));
-    await waitFor(() => expect(changeCover).toHaveBeenCalledWith(7, file));
-    await waitFor(() => expect(screen.queryByText("Ubah Sampul")).toBeNull());
-
-    await fireEvent.click(screen.getByText("Tambah"));
-    await fireEvent.submit(screen.getByPlaceholderText("Judul tautan").closest("form"));
-    await waitFor(() => expect(addItem).toHaveBeenCalledWith(7, { title: "", url: "" }));
-  });
-  it("item tanpa judul tetap dirender", () => {
-    render({ linkTree: { ...tree, items: [{ id: 12, url: "https://x.com" }] } });
-    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, o]) => o.method === "DELETE")).toBe(true));
   });
 });

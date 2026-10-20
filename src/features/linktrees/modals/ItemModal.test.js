@@ -1,38 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/svelte";
-vi.mock("../states/linkTreesStore.js", async (orig) => ({ ...(await orig()), addItem: vi.fn(), changeItem: vi.fn() }));
-vi.mock("../../../helpers/toolsHelper.js", () => ({ showErrorDialog: vi.fn() }));
-import { addItem, changeItem } from "../states/linkTreesStore.js";
-import { showErrorDialog } from "../../../helpers/toolsHelper.js";
-import { renderWithProviders } from "../../../test-utils.js";
 import ItemModal from "./ItemModal.svelte";
+import { renderWithProviders, mockApi, okResponse, sampleTree } from "../../../test-utils.js";
+
+const routes = {
+  "POST /link-trees/t1/items": okResponse({}, "Ditambah"),
+  "PUT /link-trees/t1/items/i1": okResponse({}, "Diubah"),
+  "GET /link-trees/t1": okResponse({ link_tree: sampleTree }),
+};
 
 describe("ItemModal", () => {
-  beforeEach(() => vi.clearAllMocks());
   it("mode tambah", async () => {
-    addItem.mockResolvedValue({ ok: true });
-    const onclose = vi.fn();
-    renderWithProviders(ItemModal, { props: { linkTreeId: 1, onclose } });
-    expect(screen.getByText("Tambah Tautan", { selector: "h2" })).toBeInTheDocument();
-    await fireEvent.input(screen.getByPlaceholderText("Judul tautan"), { target: { value: "GH" } });
-    await fireEvent.input(screen.getByPlaceholderText("https://..."), { target: { value: "https://g.com" } });
-    await fireEvent.submit(screen.getByPlaceholderText("Judul tautan").closest("form"));
-    await waitFor(() => expect(onclose).toHaveBeenCalled());
-    expect(addItem).toHaveBeenCalledWith(1, { title: "GH", url: "https://g.com" });
+    const onClose = vi.fn();
+    const fetchMock = mockApi(routes);
+    renderWithProviders(ItemModal, { linkTreeId: "t1", item: null, onClose });
+    expect(screen.getByRole("dialog", { name: "Tambah Tautan" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByLabelText("Judul tautan"), { target: { value: "Blog" } });
+    await fireEvent.input(screen.getByLabelText("URL"), { target: { value: "https://blog.dev" } });
+    await fireEvent.submit(screen.getByTestId("item-form"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
   });
-  it("mode ubah", async () => {
-    changeItem.mockResolvedValue({ ok: true });
-    const onclose = vi.fn();
-    renderWithProviders(ItemModal, { props: { linkTreeId: 1, item: { id: 9, title: "A", url: "https://a.com" }, onclose } });
-    expect(screen.getByText("Ubah Tautan")).toBeInTheDocument();
-    await fireEvent.submit(screen.getByDisplayValue("A").closest("form"));
-    await waitFor(() => expect(changeItem).toHaveBeenCalledWith(1, 9, { title: "A", url: "https://a.com" }));
-    expect(onclose).toHaveBeenCalled();
-  });
-  it("gagal", async () => {
-    addItem.mockResolvedValue({ ok: false, message: "err" });
-    renderWithProviders(ItemModal, { props: { linkTreeId: 1, onclose: vi.fn() } });
-    await fireEvent.submit(screen.getByPlaceholderText("Judul tautan").closest("form"));
-    await waitFor(() => expect(showErrorDialog).toHaveBeenCalledWith("err"));
+
+  it("mode ubah terisi data tautan", async () => {
+    const onClose = vi.fn();
+    const fetchMock = mockApi(routes);
+    renderWithProviders(ItemModal, { linkTreeId: "t1", item: sampleTree.items[0], onClose });
+    expect(screen.getByRole("dialog", { name: "Ubah Tautan" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Judul tautan")).toHaveValue("GitHub");
+    await fireEvent.submit(screen.getByTestId("item-form"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
   });
 });

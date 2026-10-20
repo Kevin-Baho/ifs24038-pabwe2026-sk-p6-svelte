@@ -1,90 +1,113 @@
 <script>
   import { onMount } from "svelte";
-  import { Plus, Trash2, Search } from "lucide-svelte";
-  import { linkTrees, loading, fetchLinkTrees, removeLinkTree, removeAllLinkTrees } from "../states/linkTreesStore.js";
-  import { profile } from "../../auth/states/authStore.js";
-  import { showConfirmDialog, showErrorDialog, showSuccessDialog, formatDate } from "../../../helpers/toolsHelper.js";
-  import Link from "../../common/components/Link.svelte";
+  import { Link, Plus, Trash2 } from "lucide-svelte";
   import AddModal from "../modals/AddModal.svelte";
+  import {
+    linkTrees,
+    loadLinkTrees,
+    removeLinkTree,
+    removeAllLinkTrees,
+  } from "../states/linkTreesStore.js";
+  import { profile } from "../../users/states/usersStore.js";
+  import { link } from "../../../router.js";
+  import { handleResult, showConfirmDialog } from "../../../helpers/toolsHelper.js";
 
   let search = $state("");
   let onlyMine = $state(false);
   let showAdd = $state(false);
 
-  onMount(fetchLinkTrees);
+  const noop = () => {};
+  const isMine = (item) => item.user_id === ($profile || {}).id;
 
   const filtered = $derived(
     $linkTrees.filter(
-      (l) => (l.title ?? "").toLowerCase().includes(search.toLowerCase()) && (!onlyMine || l.user_id === $profile?.id)
+      (item) =>
+        item.title.toLowerCase().includes(search.toLowerCase()) && (!onlyMine || isMine(item))
     )
   );
+
   const stats = $derived({
     total: $linkTrees.length,
-    public: $linkTrees.filter((l) => l.type === "public").length,
-    unlisted: $linkTrees.filter((l) => l.type === "unlisted").length,
-    private: $linkTrees.filter((l) => l.type === "private").length,
+    public: $linkTrees.filter((item) => item.type === "public").length,
+    unlisted: $linkTrees.filter((item) => item.type === "unlisted").length,
+    private: $linkTrees.filter((item) => item.type === "private").length,
+    mine: $linkTrees.filter(isMine).length,
   });
 
-  async function remove(l) {
-    if (!(await showConfirmDialog(`Hapus "${l.title}"?`))) return;
-    const r = await removeLinkTree(l.id);
-    if (r.ok) showSuccessDialog("Link tree dihapus");
-    else showErrorDialog(r.message);
+  onMount(() => {
+    loadLinkTrees();
+  });
+
+  async function remove(item) {
+    if (await showConfirmDialog(`Hapus link tree "${item.title}"?`)) {
+      await handleResult(await removeLinkTree(item.id), noop);
+    }
   }
+
   async function removeAll() {
-    if (!(await showConfirmDialog("Hapus SEMUA link tree milikmu?"))) return;
-    const r = await removeAllLinkTrees();
-    if (r.ok) showSuccessDialog("Semua link tree dihapus");
-    else showErrorDialog(r.message);
+    if (await showConfirmDialog("Hapus semua link tree? Tindakan ini tidak dapat dibatalkan.")) {
+      await handleResult(await removeAllLinkTrees(), noop);
+    }
   }
 </script>
 
-<div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-  <h1 class="text-2xl font-bold">Semua Link Tree</h1>
-  <div class="flex gap-2">
-    <button onclick={removeAll} class="px-3 py-2 rounded-lg border text-red-600 text-sm">Hapus Semua</button>
-    <button onclick={() => (showAdd = true)} class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm flex items-center gap-1">
-      <Plus class="w-4 h-4" /> Tambah
-    </button>
+<section class="space-y-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-xl font-bold">Semua Link Tree</h1>
+    <div class="flex gap-2">
+      <button type="button" onclick={removeAll}
+        class="flex items-center gap-1 rounded-lg border border-red-200 text-red-600 px-3 py-2 text-sm font-semibold">
+        <Trash2 size={16} /> Hapus semua
+      </button>
+      <button type="button" onclick={() => (showAdd = true)}
+        class="flex items-center gap-1 rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-semibold">
+        <Plus size={16} /> Tambah
+      </button>
+    </div>
   </div>
-</div>
 
-<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-center">
-  {#each Object.entries(stats) as [k, v] (k)}
-    <div class="bg-white rounded-xl p-3 shadow-sm"><p class="text-2xl font-bold">{v}</p><p class="text-xs capitalize text-slate-600">{k}</p></div>
-  {/each}
-</div>
-
-<div class="flex flex-wrap gap-3 items-center mb-4">
-  <div class="relative flex-1 min-w-48">
-    <Search class="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-    <input bind:value={search} placeholder="Cari judul..." class="w-full border rounded-lg pl-9 pr-3 py-2" />
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3" data-testid="stats">
+    <div class="bg-white border border-slate-200 rounded-xl p-3"><p class="text-xs text-slate-500">Total</p><p class="text-xl font-bold" data-testid="stat-total">{stats.total}</p></div>
+    <div class="bg-white border border-slate-200 rounded-xl p-3"><p class="text-xs text-slate-500">Public</p><p class="text-xl font-bold" data-testid="stat-public">{stats.public}</p></div>
+    <div class="bg-white border border-slate-200 rounded-xl p-3"><p class="text-xs text-slate-500">Unlisted</p><p class="text-xl font-bold" data-testid="stat-unlisted">{stats.unlisted}</p></div>
+    <div class="bg-white border border-slate-200 rounded-xl p-3"><p class="text-xs text-slate-500">Private</p><p class="text-xl font-bold" data-testid="stat-private">{stats.private}</p></div>
+    <div class="bg-white border border-slate-200 rounded-xl p-3"><p class="text-xs text-slate-500">Milik saya</p><p class="text-xl font-bold" data-testid="stat-mine">{stats.mine}</p></div>
   </div>
-  <label class="text-sm flex items-center gap-2"><input type="checkbox" bind:checked={onlyMine} /> Milik saya</label>
-</div>
 
-{#if $loading}
-  <p class="text-slate-600">Memuat...</p>
-{:else if filtered.length === 0}
-  <p class="text-slate-600">Tidak ada link tree.</p>
-{:else}
-  <ul class="grid gap-3 sm:grid-cols-2">
-    {#each filtered as l (l.id)}
-      <li class="bg-white rounded-xl shadow-sm overflow-hidden">
-        {#if l.cover}<img src={l.cover} alt={l.title} class="h-28 w-full object-cover" />{/if}
-        <div class="p-4">
-          <div class="flex justify-between items-start">
-            <Link href={`/link-trees/${l.id}`} class="font-semibold text-indigo-600">{l.title}</Link>
-            {#if l.user_id === $profile?.id}
-              <button onclick={() => remove(l)} aria-label="Hapus {l.title}" class="text-red-500"><Trash2 class="w-4 h-4" /></button>
-            {/if}
+  <div class="flex flex-wrap items-center gap-3">
+    <input type="search" placeholder="Cari link tree..." bind:value={search} aria-label="Cari"
+      class="flex-1 min-w-48 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <label class="flex items-center gap-2 text-sm" for="only-mine">
+      <input id="only-mine" type="checkbox" bind:checked={onlyMine} /> Milik saya
+    </label>
+  </div>
+
+  {#if filtered.length === 0}
+    <p class="text-slate-500" data-testid="empty">Tidak ada link tree.</p>
+  {:else}
+    <ul class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {#each filtered as item (item.id)}
+        <li class="bg-white border border-slate-200 rounded-2xl overflow-hidden" data-testid="card">
+          {#if item.cover}
+            <img src={item.cover} alt={item.title} class="h-32 w-full object-cover" />
+          {:else}
+            <div class="h-32 flex items-center justify-center bg-indigo-50 text-indigo-400"><Link size={36} /></div>
+          {/if}
+          <div class="p-4 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <a href={`/link-trees/${item.id}`} onclick={link} class="font-bold truncate hover:text-indigo-600">{item.title}</a>
+              <span class="text-xs rounded-full bg-slate-100 px-2 py-0.5">{item.type}</span>
+            </div>
+            <p class="text-sm text-slate-500 line-clamp-2">{item.description}</p>
+            <button type="button" onclick={() => remove(item)} aria-label={`Hapus ${item.title}`}
+              class="text-red-700 text-sm flex items-center gap-1"><Trash2 size={14} /> Hapus</button>
           </div>
-          <p class="text-sm text-slate-600 line-clamp-2">{l.description}</p>
-          <p class="text-xs text-slate-600 mt-2">{`${l.type ?? "-"} • ${formatDate(l.created_at)}`}</p>
-        </div>
-      </li>
-    {/each}
-  </ul>
-{/if}
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</section>
 
-{#if showAdd}<AddModal onclose={() => (showAdd = false)} />{/if}
+{#if showAdd}
+  <AddModal onClose={() => (showAdd = false)} />
+{/if}

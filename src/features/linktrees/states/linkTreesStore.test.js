@@ -1,80 +1,81 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { get } from "svelte/store";
-vi.mock("../api/linkTreeApi.js", () => ({
-  getLinkTreesApi: vi.fn(), getLinkTreeApi: vi.fn(), addLinkTreeApi: vi.fn(), updateLinkTreeApi: vi.fn(),
-  updateCoverApi: vi.fn(), deleteLinkTreeApi: vi.fn(), deleteAllLinkTreesApi: vi.fn(),
-  addItemApi: vi.fn(), updateItemApi: vi.fn(), deleteItemApi: vi.fn(),
-}));
-import * as api from "../api/linkTreeApi.js";
-import * as s from "./linkTreesStore.js";
+import * as store from "./linkTreesStore.js";
+import { mockApi, okResponse, failResponse, resetAllStores, sampleTree } from "../../../test-utils.js";
 
-const ok = (data = {}) => ({ ok: true, data });
-const fail = { ok: false, message: "gagal" };
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  s.linkTrees.set([]);
-  s.linkTree.set(null);
-  api.getLinkTreesApi.mockResolvedValue(ok({ link_trees: [{ id: 1 }] }));
-  api.getLinkTreeApi.mockResolvedValue(ok({ link_tree: { id: 1 } }));
-});
+const listRoutes = {
+  "GET /link-trees": okResponse({ link_trees: [sampleTree] }),
+  "GET /link-trees/t1": okResponse({ link_tree: sampleTree }),
+};
 
 describe("linkTreesStore", () => {
-  it("fetchLinkTrees sukses & gagal", async () => {
-    await s.fetchLinkTrees();
-    expect(get(s.linkTrees)).toEqual([{ id: 1 }]);
-    expect(get(s.loading)).toBe(false);
-    s.linkTrees.set([]);
-    api.getLinkTreesApi.mockResolvedValue(fail);
-    await s.fetchLinkTrees();
-    expect(get(s.linkTrees)).toEqual([]);
-  });
-  it("fetchLinkTree sukses & gagal", async () => {
-    await s.fetchLinkTree(1);
-    expect(get(s.linkTree)).toEqual({ id: 1 });
-    api.getLinkTreeApi.mockResolvedValue(fail);
-    await s.fetchLinkTree(1);
-    expect(get(s.linkTree)).toBeNull();
-  });
-  it("mutasi sukses memuat ulang data & mengatur bendera", async () => {
-    const file = new File(["x"], "a.png");
-    for (const call of ["addLinkTreeApi", "updateLinkTreeApi", "updateCoverApi", "deleteLinkTreeApi",
-      "deleteAllLinkTreesApi", "addItemApi", "updateItemApi", "deleteItemApi"]) api[call].mockResolvedValue(ok());
+  beforeEach(resetAllStores);
 
-    await s.addLinkTree({ title: "a" });
-    expect(api.addLinkTreeApi).toHaveBeenCalledWith({ title: "a" });
-    await s.changeLinkTree(1, { title: "b" });
-    expect(api.updateLinkTreeApi).toHaveBeenCalledWith(1, { title: "b" });
-    await s.changeCover(1, file);
-    expect(api.updateCoverApi).toHaveBeenCalledWith(1, file);
-    await s.removeLinkTree(1);
-    expect(api.deleteLinkTreeApi).toHaveBeenCalledWith(1);
-    await s.removeAllLinkTrees();
-    expect(api.deleteAllLinkTreesApi).toHaveBeenCalled();
-    await s.addItem(1, { title: "i" });
-    expect(api.addItemApi).toHaveBeenCalledWith(1, { title: "i" });
-    await s.changeItem(1, 2, { title: "j" });
-    expect(api.updateItemApi).toHaveBeenCalledWith(1, 2, { title: "j" });
-    await s.removeItem(1, 2);
-    expect(api.deleteItemApi).toHaveBeenCalledWith(1, 2);
+  it("loadLinkTrees sukses dan gagal", async () => {
+    mockApi(listRoutes);
+    await store.loadLinkTrees();
+    expect(get(store.linkTrees)).toEqual([sampleTree]);
+    mockApi({ "GET /link-trees": failResponse() });
+    await store.loadLinkTrees();
+    expect(get(store.linkTrees)).toEqual([]);
+  });
 
-    expect(api.getLinkTreesApi).toHaveBeenCalledTimes(3);
-    expect(api.getLinkTreeApi).toHaveBeenCalledTimes(5);
-    expect(Object.values(get(s.flags)).every((v) => v === false)).toBe(true);
+  it("loadLinkTree sukses (dengan dan tanpa items) dan gagal", async () => {
+    mockApi(listRoutes);
+    await store.loadLinkTree("t1");
+    expect(get(store.linkTree).items).toHaveLength(1);
+    const { items, ...noItems } = sampleTree;
+    mockApi({ "GET /link-trees/t1": okResponse({ link_tree: noItems }) });
+    await store.loadLinkTree("t1");
+    expect(get(store.linkTree).items).toEqual([]);
+    mockApi({ "GET /link-trees/t1": failResponse() });
+    await store.loadLinkTree("t1");
+    expect(get(store.linkTree)).toBeNull();
   });
-  it("bendera aktif selama mutasi berjalan", async () => {
-    let done;
-    api.addLinkTreeApi.mockReturnValue(new Promise((r) => (done = r)));
-    const p = s.addLinkTree({});
-    expect(get(s.flags).add).toBe(true);
-    done(fail);
-    await p;
-    expect(get(s.flags).add).toBe(false);
+
+  it("mutasi daftar menyalakan bendera dan memuat ulang", async () => {
+    mockApi({
+      ...listRoutes,
+      "POST /link-trees": okResponse(),
+      "DELETE /link-trees/t1": okResponse(),
+      "DELETE /link-trees": okResponse(),
+    });
+    await store.addLinkTree({});
+    await store.removeLinkTree("t1");
+    await store.removeAllLinkTrees();
+    expect(get(store.isAdded)).toBe(true);
+    expect(get(store.isDeleted)).toBe(true);
+    expect(get(store.isAllDeleted)).toBe(true);
+    expect(get(store.linkTrees)).toEqual([sampleTree]);
   });
-  it("mutasi gagal tidak memuat ulang", async () => {
-    api.deleteLinkTreeApi.mockResolvedValue(fail);
-    const r = await s.removeLinkTree(1);
-    expect(r.ok).toBe(false);
-    expect(api.getLinkTreesApi).not.toHaveBeenCalled();
+
+  it("mutasi detail dan item memuat ulang detail", async () => {
+    mockApi({
+      ...listRoutes,
+      "PUT /link-trees/t1": okResponse(),
+      "POST /link-trees/t1/cover": okResponse(),
+      "POST /link-trees/t1/items": okResponse(),
+      "PUT /link-trees/t1/items/i1": okResponse(),
+      "DELETE /link-trees/t1/items/i1": okResponse(),
+    });
+    await store.changeLinkTree("t1", {});
+    await store.changeCover("t1", new File(["x"], "c.png"));
+    await store.addItem("t1", {});
+    await store.changeItem("t1", "i1", {});
+    await store.removeItem("t1", "i1");
+    expect(get(store.isChanged)).toBe(true);
+    expect(get(store.isCoverChanged)).toBe(true);
+    expect(get(store.isItemChanged)).toBe(true);
+    expect(get(store.linkTree).id).toBe("t1");
+  });
+
+  it("mutasi gagal tidak menyalakan bendera; reset mengosongkan state", async () => {
+    mockApi({ "POST /link-trees": failResponse() });
+    await store.addLinkTree({});
+    expect(get(store.isAdded)).toBe(false);
+    store.isAdded.set(true);
+    store.linkTree.set(sampleTree);
+    store.resetLinkTrees();
+    expect(get(store.isAdded)).toBe(false);
+    expect(get(store.linkTree)).toBeNull();
   });
 });

@@ -1,7 +1,6 @@
 <script>
-  import { onMount } from "svelte";
   import { currentPath, resolveRoute, navigate } from "./router.js";
-  import { profile, loadProfile } from "./features/auth/states/authStore.js";
+  import { authToken } from "./features/auth/states/authStore.js";
   import AuthLayout from "./features/auth/layouts/AuthLayout.svelte";
   import LoginPage from "./features/auth/pages/LoginPage.svelte";
   import RegisterPage from "./features/auth/pages/RegisterPage.svelte";
@@ -12,31 +11,37 @@
   import ProfilePage from "./features/users/pages/ProfilePage.svelte";
   import NotFoundPage from "./features/common/pages/NotFoundPage.svelte";
 
-  const pages = {
-    login: LoginPage, register: RegisterPage, home: HomePage, detail: DetailPage,
-    users: UsersPage, profile: ProfilePage, notfound: NotFoundPage,
-  };
-
-  let ready = $state(false);
   const route = $derived(resolveRoute($currentPath));
-  const Page = $derived(pages[route.name]);
 
-  onMount(async () => {
-    await loadProfile();
-    ready = true;
-  });
-
+  // Penjaga rute: halaman aplikasi butuh token, halaman auth tidak boleh diakses saat login.
   $effect(() => {
-    if (!ready) return;
-    if (route.layout === "app" && !$profile) navigate("/auth/login", { replace: true });
-    else if (route.layout === "auth" && $profile) navigate("/", { replace: true });
+    if (route.layout === "app" && !$authToken) navigate("/auth/login", { replace: true });
+    else if (route.layout === "auth" && $authToken) navigate("/", { replace: true });
   });
 </script>
 
-{#if !ready}
-  <main><h1 class="py-20 text-center text-base font-normal text-slate-600">Memuat...</h1></main>
-{:else if route.layout === "auth" && !$profile}
-  <AuthLayout><Page /></AuthLayout>
-{:else if route.layout === "app" && $profile}
-  <LinkTreeLayout><Page params={route.params} /></LinkTreeLayout>
+{#if route.layout === "auth"}
+  <AuthLayout>
+    {#if route.page === "login"}
+      <LoginPage />
+    {:else}
+      <RegisterPage />
+    {/if}
+  </AuthLayout>
+{:else if route.layout === "app"}
+  <LinkTreeLayout>
+    {#if route.page === "home"}
+      <HomePage />
+    {:else if route.page === "detail"}
+      {#key route.params.linkTreeId}
+        <DetailPage linkTreeId={route.params.linkTreeId} />
+      {/key}
+    {:else if route.page === "users"}
+      <UsersPage />
+    {:else}
+      <ProfilePage />
+    {/if}
+  </LinkTreeLayout>
+{:else}
+  <NotFoundPage />
 {/if}

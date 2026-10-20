@@ -1,13 +1,17 @@
-import { it, expect } from "vitest";
 import { get } from "svelte/store";
 import { useInput } from "./useInput.js";
 
-it("useInput: nilai awal, ubah, reset", () => {
-  const { value, reset } = useInput("a");
-  expect(get(value)).toBe("a");
-  value.set("b");
-  expect(get(value)).toBe("b");
-  reset();
-  expect(get(value)).toBe("a");
-  expect(get(useInput().value)).toBe("");
+describe("useInput", () => {
+  it("menyimpan nilai awal, mengubah, dan mereset", () => {
+    const input = useInput("awal");
+    expect(get(input.value)).toBe("awal");
+    input.onChange({ target: { value: "baru" } });
+    expect(get(input.value)).toBe("baru");
+    input.reset();
+    expect(get(input.value)).toBe("awal");
+  });
+
+  it("nilai awal bawaan string kosong", () => {
+    expect(get(useInput().value)).toBe("");
+  });
 });

@@ -1,24 +1,38 @@
 <script>
-  import Modal from "../components/Modal.svelte";
+  import ModalShell from "../components/ModalShell.svelte";
   import { useInput } from "../../../hooks/useInput.js";
-  import { addItem, changeItem, flags } from "../states/linkTreesStore.js";
-  import { showErrorDialog } from "../../../helpers/toolsHelper.js";
+  import { addItem, changeItem } from "../states/linkTreesStore.js";
+  import { handleResult } from "../../../helpers/toolsHelper.js";
 
-  // item === null -> mode tambah, selain itu mode ubah
-  let { linkTreeId, item = null, onclose } = $props();
-  const { value: title } = useInput(item?.title ?? "");
-  const { value: url } = useInput(item?.url ?? "");
+  let { linkTreeId, item, onClose } = $props();
 
-  async function submit(e) {
-    e.preventDefault();
-    const body = { title: $title, url: $url };
-    const r = item ? await changeItem(linkTreeId, item.id, body) : await addItem(linkTreeId, body);
-    if (r.ok) onclose();
-    else showErrorDialog(r.message);
+  const title = useInput(item ? item.title : "");
+  const url = useInput(item ? item.url : "");
+  const titleValue = title.value;
+  const urlValue = url.value;
+
+  async function submit(event) {
+    event.preventDefault();
+    const data = { title: $titleValue, url: $urlValue };
+    const res = item
+      ? await changeItem(linkTreeId, item.id, data)
+      : await addItem(linkTreeId, data);
+    await handleResult(res, onClose);
   }
 </script>
 
-<Modal title={item ? "Ubah Tautan" : "Tambah Tautan"} {onclose} onsubmit={submit} busy={$flags.item}>
-  <input bind:value={$title} placeholder="Judul tautan" required class="w-full border rounded-lg px-3 py-2" />
-  <input type="url" bind:value={$url} placeholder="https://..." required class="w-full border rounded-lg px-3 py-2" />
-</Modal>
+<ModalShell title={item ? "Ubah Tautan" : "Tambah Tautan"} {onClose}>
+  <form onsubmit={submit} class="space-y-3" data-testid="item-form">
+    <div>
+      <label for="item-title" class="block text-sm font-medium mb-1">Judul tautan</label>
+      <input id="item-title" required value={$titleValue} oninput={title.onChange}
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    </div>
+    <div>
+      <label for="item-url" class="block text-sm font-medium mb-1">URL</label>
+      <input id="item-url" type="url" required value={$urlValue} oninput={url.onChange}
+        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    </div>
+    <button type="submit" class="w-full rounded-lg bg-indigo-600 text-white py-2 text-sm font-semibold">Simpan</button>
+  </form>
+</ModalShell>

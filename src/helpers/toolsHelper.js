@@ -1,18 +1,53 @@
-// SweetAlert2 dimuat lazy supaya tidak membebani bundle awal halaman.
-const swal = async () => (await import("sweetalert2")).default;
+import clsx from "clsx";
+import { twMerge } from "tailwind-merge";
 
-export const showSuccessDialog = async (text) => (await swal()).fire({ icon: "success", title: "Berhasil", text });
-export const showErrorDialog = async (text) => (await swal()).fire({ icon: "error", title: "Gagal", text });
-export const showWarningDialog = async (text) => (await swal()).fire({ icon: "warning", title: "Peringatan", text });
-export async function showConfirmDialog(text) {
-  const r = await (await swal()).fire({
-    icon: "question", title: "Konfirmasi", text,
-    showCancelButton: true, confirmButtonText: "Ya", cancelButtonText: "Batal",
+// Fungsi pembantu untuk memuat SweetAlert secara dinamis (Lazy Load)
+// Ini akan memotong ukuran JavaScript awal agar web lebih cepat dibuka
+const getSwal = async () => {
+  const Swal = (await import("sweetalert2")).default;
+  return Swal;
+};
+
+const dialog = async (icon, title, text) => {
+  const Swal = await getSwal();
+  return Swal.fire({ icon, title, text, confirmButtonColor: "#4f46e5" });
+};
+
+export const showSuccessDialog = (message) => dialog("success", "Berhasil", message);
+export const showErrorDialog = (message) => dialog("error", "Gagal", message);
+export const showWarningDialog = (message) => dialog("warning", "Perhatian", message);
+
+export async function showConfirmDialog(message) {
+  const Swal = await getSwal();
+  const result = await Swal.fire({
+    icon: "warning",
+    title: "Konfirmasi",
+    text: message,
+    showCancelButton: true,
+    confirmButtonText: "Ya",
+    cancelButtonText: "Batal",
+    confirmButtonColor: "#4f46e5",
   });
-  return r.isConfirmed;
+  return result.isConfirmed;
+}
+
+/** Tampilkan dialog sesuai hasil API; jalankan onSuccess bila berhasil. */
+export async function handleResult(response, onSuccess) {
+  if (response.status === "success") {
+    await showSuccessDialog(response.message);
+    onSuccess();
+    return true;
+  }
+  await showErrorDialog(response.message);
+  return false;
 }
 
 export function formatDate(value) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  return new Date(value).toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
+
+export const cn = (...inputs) => twMerge(clsx(inputs));
