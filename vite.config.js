@@ -2,11 +2,37 @@ import { defineConfig, loadEnv } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { svelteTesting } from "@testing-library/svelte/vite";
 import tailwindcss from "@tailwindcss/vite";
-import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js"; // Plugin yang aman untuk Vercel
 import process from "process";
+
+function inlineBuildStyles() {
+  return {
+    name: "inline-build-styles",
+    apply: "build",
+    transformIndexHtml: {
+      order: "post",
+      handler(html, { bundle }) {
+        if (!bundle) return html;
+
+        return html.replace(/<link\b[^>]*rel="stylesheet"[^>]*>/g, (linkTag) => {
+          const href = linkTag.match(/\bhref="\/?([^"]+\.css)"/)?.[1];
+          const stylesheet = href ? bundle[href] : null;
+          if (!stylesheet || stylesheet.type !== "asset") return linkTag;
+
+          const css =
+            typeof stylesheet.source === "string"
+              ? stylesheet.source
+              : new TextDecoder().decode(stylesheet.source);
+          delete bundle[href];
+          return `<style>${css}</style>`;
+        });
+      },
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const baseUrl = env.VITE_DELCOM_BASEURL || "https://open-api.delcom.org/api/v1";
 
   return {
     plugins: [
@@ -15,7 +41,7 @@ export default defineConfig(({ mode }) => {
       }),
       tailwindcss(),
       svelteTesting(),
-      cssInjectedByJsPlugin(), // <-- Gunakan ini
+      inlineBuildStyles(),
     ],
     server: {
       port: Number(env.APP_PORT) || 3004,
@@ -25,23 +51,13 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       chunkSizeWarningLimit: 1500,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes("node_modules")) {
-              if (id.includes("sweetalert2")) return "vendor-sweetalert";
-              if (id.includes("@toast-ui")) return "vendor-editor";
-              if (id.includes("lucide-svelte")) return "vendor-icons";
-              return "vendor";
-            }
-          },
-        },
-      },
     },
     define: {
-      DELCOM_BASEURL: JSON.stringify(
-        env.VITE_DELCOM_BASEURL || "http://localhost:8000/api/v1"
-      ),
+      // Dipakai untuk membentuk URL aset (gambar) — selalu absolut.
+      DELCOM_BASEURL: JSON.stringify(baseUrl),
+      // Dipakai untuk request API. Di production lewat proxy same-origin (/delcom-api,
+      // lihat vercel.json) sehingga tidak ada request lintas-origin/CORS preflight.
+      DELCOM_API_URL: JSON.stringify(mode === "production" ? "/delcom-api" : baseUrl),
     },
     test: {
       globals: true,

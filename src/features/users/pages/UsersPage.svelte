@@ -1,29 +1,35 @@
 <script>
   import { onMount } from "svelte";
-  import { users, loadUsers } from "../states/usersStore.js";
+  import { users, isUsersLoading, fetchUsers } from "../states/userStore.js";
+  import { formatDate } from "../../../helpers/toolsHelper.js";
+  import Avatar from "../../common/components/Avatar.svelte";
 
   onMount(() => {
-    loadUsers();
+    fetchUsers();
   });
 </script>
 
-<section>
-  <h1 class="text-xl font-bold mb-4">Pengguna</h1>
-  {#if $users.length === 0}
-    <p class="text-slate-500" data-testid="users-empty">Belum ada pengguna.</p>
+<div class="space-y-6">
+  <h1 class="text-3xl font-extrabold text-ink sm:text-4xl">Pengguna</h1>
+
+  {#if $isUsersLoading}
+    <p class="py-12 text-center text-muted">Memuat data...</p>
+  {:else if $users.length === 0}
+    <p class="rounded-xl border-2 border-dashed border-sage-400 px-4 py-12 text-center text-muted">
+      Belum ada pengguna.
+    </p>
   {:else}
-    <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <ul class="card divide-y divide-sage-200 overflow-hidden">
       {#each $users as user (user.id)}
-        <li class="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3">
-          <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-            {user.name.charAt(0).toUpperCase()}
+        <li class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3.5 sm:px-5">
+          <Avatar name={user.name} photo={user.photo} size="h-11 w-11" />
+          <div class="min-w-0 flex-1">
+            <p class="truncate font-bold text-ink">{user.name}</p>
+            <p class="truncate text-sm text-muted">{user.email}</p>
           </div>
-          <div class="min-w-0">
-            <p class="font-semibold truncate">{user.name}</p>
-            <p class="text-sm text-slate-500 truncate">{user.email}</p>
-          </div>
+          <p class="w-full pl-[3.75rem] text-sm text-muted sm:w-auto sm:pl-0">Bergabung {formatDate(user.created_at)}</p>
         </li>
       {/each}
     </ul>
   {/if}
-</section>
+</div>

@@ -1,45 +1,40 @@
-import clsx from "clsx";
+import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-// Fungsi pembantu untuk memuat SweetAlert secara dinamis (Lazy Load)
-// Ini akan memotong ukuran JavaScript awal agar web lebih cepat dibuka
-const getSwal = async () => {
-  const Swal = (await import("sweetalert2")).default;
-  return Swal;
-};
+/** SweetAlert2 dimuat saat pertama dipakai agar tidak membebani bundle awal. */
+async function fire(options) {
+  const { default: Swal } = await import("sweetalert2");
+  return Swal.fire(options);
+}
 
-const dialog = async (icon, title, text) => {
-  const Swal = await getSwal();
-  return Swal.fire({ icon, title, text, confirmButtonColor: "#4f46e5" });
-};
+export function showSuccessDialog(text) {
+  return fire({
+    icon: "success",
+    title: "Berhasil",
+    text,
+    timer: 1600,
+    showConfirmButton: false,
+  });
+}
 
-export const showSuccessDialog = (message) => dialog("success", "Berhasil", message);
-export const showErrorDialog = (message) => dialog("error", "Gagal", message);
-export const showWarningDialog = (message) => dialog("warning", "Perhatian", message);
+export function showErrorDialog(text) {
+  return fire({ icon: "error", title: "Gagal", text });
+}
 
-export async function showConfirmDialog(message) {
-  const Swal = await getSwal();
-  const result = await Swal.fire({
-    icon: "warning",
+export function showWarningDialog(text) {
+  return fire({ icon: "warning", title: "Perhatian", text });
+}
+
+export async function showConfirmDialog(text) {
+  const result = await fire({
+    icon: "question",
     title: "Konfirmasi",
-    text: message,
+    text,
     showCancelButton: true,
     confirmButtonText: "Ya",
     cancelButtonText: "Batal",
-    confirmButtonColor: "#4f46e5",
   });
   return result.isConfirmed;
-}
-
-/** Tampilkan dialog sesuai hasil API; jalankan onSuccess bila berhasil. */
-export async function handleResult(response, onSuccess) {
-  if (response.status === "success") {
-    await showSuccessDialog(response.message);
-    onSuccess();
-    return true;
-  }
-  await showErrorDialog(response.message);
-  return false;
 }
 
 export function formatDate(value) {
@@ -50,4 +45,19 @@ export function formatDate(value) {
   });
 }
 
-export const cn = (...inputs) => twMerge(clsx(inputs));
+/** Gabungkan class Tailwind tanpa konflik. */
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
+}
+
+/** Ubah path relatif dari API (mis. img/profile/1.png) menjadi URL absolut. */
+export function resolveAssetUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//.test(path)) return path;
+  return `${new URL(DELCOM_BASEURL).origin}/${path.replace(/^\//, "")}`;
+}
+
+/** API mengembalikan URL root saat cover kosong, jadi dianggap tidak ada gambar. */
+export function hasImage(url) {
+  return Boolean(url) && !url.endsWith("/");
+}

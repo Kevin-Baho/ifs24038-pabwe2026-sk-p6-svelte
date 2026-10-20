@@ -1,48 +1,65 @@
 <script>
   import { useInput } from "../../../hooks/useInput.js";
-  import { register } from "../states/authStore.js";
-  import { navigate, link } from "../../../router.js";
-  import { handleResult } from "../../../helpers/toolsHelper.js";
+  import { navigate } from "../../../router.js";
+  import { register, isAuthRegister } from "../states/authStore.js";
+  import NavLink from "../../common/components/NavLink.svelte";
 
-  const name = useInput();
-  const email = useInput();
-  const password = useInput();
-  const nameValue = name.value;
-  const emailValue = email.value;
-  const passwordValue = password.value;
-  let loading = $state(false);
+  const name = useInput("");
+  const email = useInput("");
+  const password = useInput("");
 
   async function submit(event) {
     event.preventDefault();
-    loading = true;
-    const res = await register($nameValue, $emailValue, $passwordValue);
-    loading = false;
-    await handleResult(res, () => navigate("/auth/login"));
+    const ok = await register({ name: $name, email: $email, password: $password });
+    if (ok) navigate("/auth/login");
   }
 </script>
 
-<form onsubmit={submit} class="space-y-4" data-testid="register-form">
-  <h2 class="text-lg font-bold">Daftar</h2>
+<h2 class="mb-6 text-3xl font-extrabold text-ink">Daftar</h2>
+<form onsubmit={submit} class="space-y-5">
   <div>
-    <label for="register-name-input" class="block text-sm font-medium mb-1">Nama</label>
-    <input id="register-name-input" type="text" required value={$nameValue} oninput={name.onChange}
-      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <label for="register-name-input" class="field-label">Nama</label>
+    <input
+      id="register-name-input"
+      type="text"
+      required
+      value={$name}
+      oninput={name.onChange}
+      class="field"
+    />
   </div>
   <div>
-    <label for="register-email-input" class="block text-sm font-medium mb-1">Email</label>
-    <input id="register-email-input" type="email" required value={$emailValue} oninput={email.onChange}
-      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <label for="register-email-input" class="field-label">Email</label>
+    <input
+      id="register-email-input"
+      type="email"
+      required
+      value={$email}
+      oninput={email.onChange}
+      class="field"
+    />
   </div>
   <div>
-    <label for="register-password-input" class="block text-sm font-medium mb-1">Kata sandi</label>
-    <input id="register-password-input" type="password" required value={$passwordValue} oninput={password.onChange}
-      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <label for="register-password-input" class="field-label">Kata Sandi</label>
+    <input
+      id="register-password-input"
+      type="password"
+      required
+      value={$password}
+      oninput={password.onChange}
+      class="field"
+    />
   </div>
-  <button id="register-submit-button" type="submit" disabled={loading}
-    class="w-full rounded-lg bg-indigo-600 text-white py-2 text-sm font-semibold disabled:opacity-60">
-    {loading ? "Memproses..." : "Daftar"}
+  <button
+    id="register-submit-button"
+    type="submit"
+    disabled={$isAuthRegister}
+    class="btn-primary w-full"
+  >
+    {$isAuthRegister ? "Memproses..." : "Daftar"}
   </button>
-  <p class="text-sm text-center text-slate-600">
-    Sudah punya akun? <a href="/auth/login" onclick={link} class="text-indigo-700 font-semibold underline">Masuk</a>
-  </p>
 </form>
+<p class="mt-6 text-center text-sm text-muted">
+  Sudah punya akun?
+  <NavLink href="/auth/login" class="font-bold text-pine-700 underline underline-offset-4 hover:text-pine-900">Masuk</NavLink>
+</p>

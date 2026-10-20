@@ -1,108 +1,134 @@
 <script>
-  import { onMount } from "svelte";
-  import { useInput } from "../../../hooks/useInput.js";
+  import { authProfile } from "../../auth/states/authStore.js";
   import {
-    profile,
-    loadProfile,
     updateProfile,
-    updatePhoto,
+    changePhoto,
     changePassword,
-  } from "../states/usersStore.js";
-  import { handleResult, showWarningDialog } from "../../../helpers/toolsHelper.js";
+    isProfileUpdating,
+    isPhotoUpdating,
+    isPasswordUpdating,
+  } from "../states/userStore.js";
+  import { useInput } from "../../../hooks/useInput.js";
+  import { showWarningDialog } from "../../../helpers/toolsHelper.js";
+  import Avatar from "../../common/components/Avatar.svelte";
 
-  const name = useInput();
-  const email = useInput();
-  const oldPassword = useInput();
-  const newPassword = useInput();
-  const nameValue = name.value;
-  const emailValue = email.value;
-  const oldValue = oldPassword.value;
-  const newValue = newPassword.value;
-  let photo = $state(null);
+  const name = useInput($authProfile.name);
+  const email = useInput($authProfile.email);
+  const password = useInput("");
+  const newPassword = useInput("");
+  const confirmation = useInput("");
 
-  // Isi formulir setiap kali profil tersedia / berubah.
-  $effect(() => {
-    if ($profile) {
-      nameValue.set($profile.name);
-      emailValue.set($profile.email);
-    }
-  });
+  let photoFile = $state(null);
 
-  onMount(() => {
-    loadProfile();
-  });
-
-  const onPhoto = (event) => {
-    photo = event.target.files[0];
-  };
-
-  async function saveProfile(event) {
-    event.preventDefault();
-    const res = await updateProfile({ name: $nameValue, email: $emailValue });
-    await handleResult(res, () => {});
+  function pickPhoto(event) {
+    photoFile = event.target.files[0];
   }
 
-  async function savePhoto(event) {
+  async function submitProfile(event) {
     event.preventDefault();
-    if (!photo) {
+    await updateProfile({ name: $name, email: $email });
+  }
+
+  async function submitPhoto(event) {
+    event.preventDefault();
+    if (!photoFile) {
       await showWarningDialog("Pilih foto terlebih dahulu");
       return;
     }
-    const res = await updatePhoto(photo);
-    await handleResult(res, () => {
-      photo = null;
-    });
+    await changePhoto(photoFile);
   }
 
-  async function savePassword(event) {
+  async function submitPassword(event) {
     event.preventDefault();
-    const res = await changePassword({ password: $oldValue, new_password: $newValue });
-    await handleResult(res, () => {
-      oldPassword.reset();
-      newPassword.reset();
+    if ($newPassword !== $confirmation) {
+      await showWarningDialog("Konfirmasi kata sandi tidak sama");
+      return;
+    }
+    const ok = await changePassword({
+      password: $password,
+      newPassword: $newPassword,
+      confirmation: $confirmation,
     });
+    if (ok) {
+      password.reset();
+      newPassword.reset();
+      confirmation.reset();
+    }
   }
 </script>
 
-<section class="max-w-2xl space-y-6">
-  <h1 class="text-xl font-bold">Profil</h1>
+<div class="space-y-6">
+  <h1 class="text-3xl font-extrabold text-ink sm:text-4xl">Profil</h1>
 
-  <form onsubmit={saveProfile} class="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="profile-form">
-    <h2 class="font-semibold">Data diri</h2>
-    {#if $profile && $profile.photo}
-      <img src={$profile.photo} alt="Foto profil" class="w-16 h-16 rounded-full object-cover" />
-    {/if}
-    <div>
-      <label for="profile-name" class="block text-sm font-medium mb-1">Nama</label>
-      <input id="profile-name" required value={$nameValue} oninput={name.onChange}
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-    </div>
-    <div>
-      <label for="profile-email" class="block text-sm font-medium mb-1">Email</label>
-      <input id="profile-email" type="email" required value={$emailValue} oninput={email.onChange}
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-    </div>
-    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Simpan</button>
-  </form>
+  <div class="grid items-start gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <section class="card overflow-hidden">
+      <div class="h-20 bg-pine-800"></div>
+      <div class="px-5 pb-6">
+        <div class="-mt-10 w-fit rounded-full ring-4 ring-white">
+          <Avatar name={$authProfile.name} photo={$authProfile.photo} size="h-20 w-20" />
+        </div>
+        <p class="mt-3 break-words font-display text-xl font-extrabold text-ink">{$authProfile.name}</p>
+        <p class="break-words text-sm text-muted">{$authProfile.email}</p>
 
-  <form onsubmit={savePhoto} class="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="photo-form">
-    <h2 class="font-semibold">Foto profil</h2>
-    <input type="file" accept="image/*" aria-label="Pilih foto profil" onchange={onPhoto} data-testid="photo-input" class="text-sm" />
-    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Unggah foto</button>
-  </form>
+        <h2 class="mb-3 mt-6 text-lg font-extrabold text-ink">Foto Profil</h2>
+        <form onsubmit={submitPhoto} class="space-y-3">
+          <input
+            id="photo-file"
+            type="file"
+            accept="image/*"
+            aria-label="Foto profil"
+            onchange={pickPhoto}
+            class="field cursor-pointer py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-pine-100 file:px-3 file:py-1.5 file:font-bold file:text-pine-800"
+          />
+          <button type="submit" disabled={$isPhotoUpdating} class="btn-secondary w-full">
+            {$isPhotoUpdating ? "Mengunggah..." : "Ubah Foto"}
+          </button>
+        </form>
+      </div>
+    </section>
 
-  <form onsubmit={savePassword} class="bg-white border border-slate-200 rounded-xl p-4 space-y-3" data-testid="password-form">
-    <h2 class="font-semibold">Ubah kata sandi</h2>
-    <div>
-      <label for="old-password" class="block text-sm font-medium mb-1">Kata sandi lama</label>
-      <input id="old-password" type="password" required value={$oldValue} oninput={oldPassword.onChange}
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+    <div class="space-y-6">
+      <section class="card p-5 sm:p-6">
+        <h2 class="mb-4 text-xl font-extrabold text-ink">Data Diri</h2>
+        <form onsubmit={submitProfile} class="space-y-5">
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="profile-name" class="field-label">Nama</label>
+              <input id="profile-name" type="text" value={$name} oninput={name.onChange} class="field" />
+            </div>
+            <div>
+              <label for="profile-email" class="field-label">Email</label>
+              <input id="profile-email" type="email" value={$email} oninput={email.onChange} class="field" />
+            </div>
+          </div>
+          <button type="submit" disabled={$isProfileUpdating} class="btn-primary">
+            {$isProfileUpdating ? "Menyimpan..." : "Simpan Data"}
+          </button>
+        </form>
+      </section>
+
+      <section class="card p-5 sm:p-6">
+        <h2 class="mb-4 text-xl font-extrabold text-ink">Ubah Kata Sandi</h2>
+        <form onsubmit={submitPassword} class="space-y-5">
+          <div>
+            <label for="current-password" class="field-label">Kata Sandi Saat Ini</label>
+            <input id="current-password" type="password" value={$password} oninput={password.onChange} class="field" />
+          </div>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+              <label for="new-password" class="field-label">Kata Sandi Baru</label>
+              <input id="new-password" type="password" value={$newPassword} oninput={newPassword.onChange} class="field" />
+            </div>
+            <div>
+              <label for="confirm-password" class="field-label">Konfirmasi Kata Sandi Baru</label>
+              <input id="confirm-password" type="password" value={$confirmation} oninput={confirmation.onChange} class="field" />
+            </div>
+          </div>
+          <button type="submit" disabled={$isPasswordUpdating} class="btn-primary">
+            {$isPasswordUpdating ? "Menyimpan..." : "Ubah Kata Sandi"}
+          </button>
+        </form>
+      </section>
     </div>
-    <div>
-      <label for="new-password" class="block text-sm font-medium mb-1">Kata sandi baru</label>
-      <input id="new-password" type="password" required value={$newValue} oninput={newPassword.onChange}
-        class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-    </div>
-    <button type="submit" class="rounded-lg bg-indigo-600 text-white px-4 py-2 text-sm font-semibold">Ubah kata sandi</button>
-  </form>
-</section>
+  </div>
+</div>
